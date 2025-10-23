@@ -57,3 +57,37 @@ def generate_graph(type="ring_of_cliques", nodes=50):
     
     return graph
 
+def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42):
+    """
+    Binary Markov network:
+      - unary factors phi_i(x_i) ~ biased Bernoulli
+      - pairwise factors phi_ij(x_i, x_j) ~ Ising-like couplings
+    Deterministic subgraphs can be encoded by strong couplings or degenerate tables.
+    """
+    rng = np.random.default_rng(seed)
+    M = MarkovModel()
+    M.add_nodes_from(G.nodes())
+    M.add_edges_from(G.edges())
+
+    factors = []
+
+    # unary
+    for v in M.nodes():
+        p1 = rng.uniform(*bias_range)
+        phi = DiscreteFactor(variables=[v], cardinality=[2], values=[1-p1, p1])
+        factors.append(phi)
+
+    # pairwise
+    for u, v in M.edges():
+        # favor equality or inequality randomly
+        J = rng.uniform(*coupling_range)
+        same = rng.random() < 0.5
+        table = np.array([
+            [J if same else 1, 1],
+            [1, J if same else 1]
+        ], dtype=float)
+        phi = DiscreteFactor(variables=[u, v], cardinality=[2, 2], values=table)
+        factors.append(phi)
+
+    M.add_factors(*factors)
+    return M
