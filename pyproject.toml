@@ -11,7 +11,9 @@ readme = "README.md"
 requires-python = ">=3.12.8"
 license = { file = "LICENSE" }
 authors = [{ name = "Immanuel Thoke", email = "immanuel.thoke@uni-leipzig.de" }]
-dependencies = []
+dependencies = [
+    "pgmpy>=1.0.0",
+]
 [project.optional-dependencies]
 dev = ["pytest"]
 
