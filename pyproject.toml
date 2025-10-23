@@ -12,6 +12,7 @@ requires-python = ">=3.12.8"
 license = { file = "LICENSE" }
 authors = [{ name = "Immanuel Thoke", email = "immanuel.thoke@uni-leipzig.de" }]
 dependencies = [
+    "matplotlib>=3.10.7",
     "pgmpy>=1.0.0",
 ]
 [project.optional-dependencies]
