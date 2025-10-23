@@ -1,0 +1,20 @@
+# pyproject.toml
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "GraphStudies"
+version = "0.0.1"
+description = "PhD-Studies on graphical models"
+readme = "README.md"
+requires-python = ">=3.12.8"
+license = { file = "LICENSE" }
+authors = [{ name = "Immanuel Thoke", email = "immanuel.thoke@uni-leipzig.de" }]
+dependencies = []
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+addopts = "-ra -q --cov=your_package --cov-report=term-missing"
+testpaths = ["tests"]
