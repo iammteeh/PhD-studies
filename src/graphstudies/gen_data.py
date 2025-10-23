@@ -91,3 +91,7 @@ def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), se
 
     M.add_factors(*factors)
     return M
+
+def gibbs_sample_markov(M, size=5000, burn_in=500, seed=123):
+    gibbs = GibbsSampling(M)
+    return gibbs.sample(size=size, burn_in=burn_in, seed=seed)
