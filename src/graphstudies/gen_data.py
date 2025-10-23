@@ -95,3 +95,47 @@ def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), se
 def gibbs_sample_markov(M, size=5000, burn_in=500, seed=123):
     gibbs = GibbsSampling(M)
     return gibbs.sample(size=size, burn_in=burn_in, seed=seed)
+
+def factorgraph_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42):
+    """
+    Binary Factor Graph:
+      - unary factors phi_i(x_i) ~ biased Bernoulli
+      - pairwise factors phi_ij(x_i, x_j) ~ Ising-like couplings
+    Deterministic subgraphs can be encoded by strong couplings or degenerate tables.
+    """
+    rng = np.random.default_rng(seed)
+    FG = FactorGraph()
+    FG.add_nodes_from(G.nodes())
+    FG.add_edges_from(G.edges())
+
+    factors = []
+
+    # unary
+    for v in FG.nodes():
+        p1 = rng.uniform(*bias_range)
+        phi = DiscreteFactor(variables=[v], cardinality=[2], values=[1-p1, p1])
+        factors.append(phi)
+
+    # pairwise
+    for u, v in FG.edges():
+        # favor equality or inequality randomly
+        J = rng.uniform(*coupling_range)
+        same = rng.random() < 0.5
+        table = np.array([
+            [J if same else 1, 1],
+            [1, J if same else 1]
+        ], dtype=float)
+        phi = DiscreteFactor(variables=[u, v], cardinality=[2, 2], values=table)
+        factors.append(phi)
+
+    FG.add_factors(*factors)
+    return FG
+
+def gen_data():
+    base_graph = generate_random_graph(type="geometric", nodes=50)
+    # apply constraints to base_graph to get knowledge graph
+    constrained_graph = generate_graph(type="ring_of_cliques", nodes=50)
+    G = nx.compose(base_graph, constrained_graph) # symmetric difference to combine edges
+    M = markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42)
+    data = gibbs_sample_markov(M, size=1000, burn_in=500, seed=123)
+    return G, M, data
