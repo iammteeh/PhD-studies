@@ -3,7 +3,7 @@ import numpy as np
 import networkx as nx
 
 
-from pgmpy.models import BayesianModel, DynamicBayesianNetwork as DBN, MarkovModel, FactorGraph
+from pgmpy.models import DiscreteBayesianNetwork, DynamicBayesianNetwork as DBN, MarkovNetwork, FactorGraph
 from pgmpy.factors.discrete import TabularCPD, DiscreteFactor
 from pgmpy.sampling import BayesianModelSampling, GibbsSampling
 
@@ -78,7 +78,7 @@ def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), se
     Numerically, this results in a complex landscape of dependencies that can be explored through sampling methods. Strong couplings can create near-deterministic relationships, while biases can skew marginal distributions and influence edge connectivity patterns.
     """
     rng = np.random.default_rng(seed)
-    M = MarkovModel()
+    M = MarkovNetwork()
     M.add_nodes_from(G.nodes())
     M.add_edges_from(G.edges())
 
@@ -190,7 +190,43 @@ def hierarchical_bayesian_model(G, group_var, noise_scale=0.1, seed=42):
             data[node] = np.dot(weights, parent_values) + noise
     return data
 
-def gen_data():
+def generate_random_CPD(G):
+    """Generate random CPDs for a DiscreteBayesianNetwork defined by the DAG G."""
+    model = DiscreteBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            p = rng.uniform(0.2, 0.8)
+            cpd = TabularCPD(variable=node, variable_card=2, values=[[1-p], [p]])
+        else:
+            # child node
+            parent_card = [2] * len(parents)
+            num_rows = 2
+            num_cols = 2 ** len(parents)
+            values = np.zeros((num_rows, num_cols))
+            for col in range(num_cols):
+                p = rng.uniform(0.2, 0.8)
+                values[0, col] = 1 - p
+                values[1, col] = p
+            cpd = TabularCPD(variable=node, variable_card=2, evidence=parents, evidence_card=parent_card, values=values)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    return model
+
+def generate_random_data(G, num_samples=1000):
+    """Generate random data for a DiscreteBayesianNetwork defined by the DAG G."""
+    model = generate_random_CPD(G)
+    data = model.simulate(num_samples, seed=42)
+    return data
+
+def gen_random_fields_graph_data():
     base_graph = generate_random_graph(type="geometric", nodes=50)
     # apply constraints to base_graph to get knowledge graph
     constrained_graph = generate_graph(type="ring_of_cliques", nodes=50)
@@ -198,3 +234,30 @@ def gen_data():
     M = markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42)
     data = gibbs_sample_markov(M, size=1000, burn_in=500, seed=123)
     return G, M, data
+
+def gen_structural_equation_data():
+    """
+    First, we create a directed acyclic graph (DAG) to represent the causal structure of the variables.
+    Then, we generate data from a linear Gaussian structural equation model defined by this DAG.
+    """
+    G = nx.DiGraph()
+    G.add_edges_from([
+        ('X1', 'Y1'),
+        ('X2', 'Y1'),
+        ('Y1', 'Y2'),
+        ('Y2', 'Y3')
+    ])
+    data = linear_structural_equation_model(G, noise_scale=0.1, seed=42)
+    return G, data
+
+def gen_hierarchical_bayesian_data():
+    G = nx.DiGraph()
+    G.add_edges_from([
+        ('Group', 'A'),
+        ('Group', 'B'),
+        ('A', 'C'),
+        ('B', 'C'),
+        ('C', 'D')
+    ])
+    data = hierarchical_bayesian_model(G, group_var='Group', noise_scale=0.1, seed=42)
+    return G, data
