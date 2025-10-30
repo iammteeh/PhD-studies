@@ -148,6 +148,48 @@ def factorgraph_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0
     FG.add_factors(*factors)
     return FG
 
+def linear_structural_equation_model(G, noise_scale=0.1, seed=42):
+    """Generate data from a linear Gaussian structural equation model defined by the DAG G."""
+    rng = np.random.default_rng(seed)
+    data = {}
+    for node in nx.topological_sort(G):
+        parents = list(G.predecessors(node))
+        if not parents:
+            # root node, sample from standard normal
+            data[node] = rng.normal(loc=0.0, scale=noise_scale)
+        else:
+            # linear combination of parents + noise
+            parent_values = np.array([data[p] for p in parents])
+            weights = rng.uniform(0.5, 1.5, size=len(parents))
+            noise = rng.normal(loc=0.0, scale=noise_scale)
+            data[node] = np.dot(weights, parent_values) + noise
+    return data
+
+def hierarchical_bayesian_model(G, group_var, noise_scale=0.1, seed=42):
+    """Generate data from a hierarchical Bayesian model defined by the DAG G with a grouping variable."""
+    rng = np.random.default_rng(seed)
+    data = {}
+    group_levels = rng.integers(low=0, high=3, size=10)  # assume 3 groups for simplicity, could be a Gaussian process as well
+    group_params = {level: rng.normal(loc=0.0, scale=1.0) for level in group_levels}
+
+    for node in nx.topological_sort(G):
+        parents = list(G.predecessors(node))
+        if node == group_var:
+            # grouping variable
+            data[node] = rng.choice(group_levels)
+        elif not parents:
+            # root node, sample from group-specific distribution
+            group_level = data[group_var]
+            mu = group_params[group_level]
+            data[node] = rng.normal(loc=mu, scale=noise_scale)
+        else:
+            # linear combination of parents + noise
+            parent_values = np.array([data[p] for p in parents])
+            weights = rng.uniform(0.5, 1.5, size=len(parents))
+            noise = rng.normal(loc=0.0, scale=noise_scale)
+            data[node] = np.dot(weights, parent_values) + noise
+    return data
+
 def gen_data():
     base_graph = generate_random_graph(type="geometric", nodes=50)
     # apply constraints to base_graph to get knowledge graph
