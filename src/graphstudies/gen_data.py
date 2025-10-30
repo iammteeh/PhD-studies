@@ -63,6 +63,19 @@ def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), se
       - unary factors phi_i(x_i) ~ biased Bernoulli
       - pairwise factors phi_ij(x_i, x_j) ~ Ising-like couplings
     Deterministic subgraphs can be encoded by strong couplings or degenerate tables.
+    Graphs can be cyclic and contain cliques, representing complex dependencies and are usually undirected for Markov networks,
+    because they represent conditional independence relationships.
+
+    bias_range: tuple(float, float)
+        Range for sampling unary bias probabilities. Each variable x_i has P(x_i=1) ~ Uniform(bias_range[0], bias_range[1]).
+        default is (0.2, 0.8) to avoid extreme biases. Interpretation depends on coupling strengths, e.g., for strong positive couplings, a bias towards 1 increases the likelihood of connected variables being 1.
+    
+    coupling_range: tuple(float, float)
+        Range for sampling pairwise coupling strengths. Each edge (i, j) has coupling strength J_ij ~ Uniform(coupling_range[0], coupling_range[1]).
+        default is (0.5, 2.0) to allow for both weak and strong couplings. Higher values favor agreement (if same=True) or disagreement (if same=False) between connected variables.
+
+    The mechanics of how these parameters influence the joint distribution are rooted in the Ising model framework, where unary factors represent individual variable tendencies and pairwise factors capture interactions between variables.
+    Numerically, this results in a complex landscape of dependencies that can be explored through sampling methods. Strong couplings can create near-deterministic relationships, while biases can skew marginal distributions and influence edge connectivity patterns.
     """
     rng = np.random.default_rng(seed)
     M = MarkovModel()
@@ -81,7 +94,7 @@ def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), se
     for u, v in M.edges():
         # favor equality or inequality randomly
         J = rng.uniform(*coupling_range)
-        same = rng.random() < 0.5
+        same = rng.random() < 0.5 
         table = np.array([
             [J if same else 1, 1],
             [1, J if same else 1]
@@ -102,6 +115,10 @@ def factorgraph_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0
       - unary factors phi_i(x_i) ~ biased Bernoulli
       - pairwise factors phi_ij(x_i, x_j) ~ Ising-like couplings
     Deterministic subgraphs can be encoded by strong couplings or degenerate tables.
+
+    Is similar to markov_from_skeleton but uses FactorGraph instead of MarkovModel.
+    The main difference is that FactorGraph explicitly represents factors as nodes, such that
+    the resulting graph is bipartite between variable nodes and factor nodes.
     """
     rng = np.random.default_rng(seed)
     FG = FactorGraph()
