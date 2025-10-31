@@ -491,3 +491,41 @@ def gen_hierarchical_bayesian_data():
     ])
     data = hierarchical_bayesian_model(G, group_var='Group', noise_scale=0.1, seed=42)
     return G, data
+
+def generate_random_cluster_graph(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42):
+    """
+    Generate a Cluster Graph from the skeleton G with binary variables.
+    Each cluster corresponds to a clique in the original graph.
+    Factors are defined similarly to markov_from_skeleton.
+
+    Cluster Graphs are useful for representing complex dependencies and performing inference using the junction tree algorithm.
+    """
+    rng = np.random.default_rng(seed)
+    CG = ClusterGraph()
+
+    # Find cliques in the graph
+    cliques = list(nx.find_cliques(G))
+    for clique in cliques:
+        CG.add_cluster(clique)
+
+    factors = []
+
+    # unary factors for each variable
+    for v in G.nodes():
+        p1 = rng.uniform(*bias_range)
+        phi = DiscreteFactor(variables=[v], cardinality=[2], values=[1-p1, p1])
+        factors.append(phi)
+
+    # pairwise factors for each edge
+    for u, v in G.edges():
+        J = rng.uniform(*coupling_range)
+        same = rng.random() < 0.5 
+        table = np.array([
+            [J if same else 1, 1],
+            [1, J if same else 1]
+        ], dtype=float)
+        phi = DiscreteFactor(variables=[u, v], cardinality=[2, 2], values=table)
+        factors.append(phi)
+
+    CG.add_factors(*factors)
+    return CG
