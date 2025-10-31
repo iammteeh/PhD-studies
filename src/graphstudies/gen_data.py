@@ -201,6 +201,209 @@ def generate_random_CPD(G):
     model.check_model()
     return model
 
+def generate_random_functional_CPD(G):
+    """Generate functional CPDs for a Functional Bayesian Network defined by skeleton G."""
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            def func(*args):
+                return int(sum(args) % 2)  # simple parity function
+            cpd = FunctionalCPD(variable=node, function=func, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def generate_random_linear_gaussian_CPD(G):
+    """Generate linear Gaussian CPDs for a Linear Gaussian Bayesian Network defined by skeleton G."""
+    model = LinearGaussianBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            mean = rng.normal(0, 1)
+            variance = rng.uniform(0.5, 2.0)
+            cpd = LinearGaussianCPD(variable=node, mean=mean, variance=variance, evidence=[])
+        else:
+            # child node
+            coefficients = {parent: rng.uniform(0.5, 1.5) for parent in parents}
+            variance = rng.uniform(0.5, 2.0)
+            cpd = LinearGaussianCPD(variable=node, coefficients=coefficients, variance=variance, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def generate_complex_family_functional_CPD(G):
+    """Generate complex functional CPDs for a Functional Bayesian Network defined by skeleton G.
+    this function creates CPDs that combine multiple functional forms to model complex dependencies. 
+     For example, a node's value could depend on a combination of parity, growth, and decay functions of its parents.
+     1. Parity Function: The node's value is determined by the parity (even or odd sum) of its parents' values.
+     2. Growth Function: The node's value increases with the sum of its parents' values, capped at a maximum.
+     3. Decay Function: The node's value decreases with the sum of its parents' values, floored at a minimum.
+    """
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+
+    # Example for simple product of functions:
+    def func(*args):
+        prod = 1
+        for arg in args:
+            prod *= arg
+        return int(prod % 2)  # product mod 2
+    
+    #To model an experimentally useful complex family of functional CPDs, we can define a composite function that combines these behaviors:
+    def complex_func(*args):
+        parity = sum(args) % 2
+        growth = min(sum(args) + 1, 1)
+        decay = max(sum(args) - 1, 0)
+        # Combine the effects (this is just an example; the combination logic can be adjusted)
+        combined_value = (parity + growth + decay) / 3
+        return int(combined_value > 0.5)  # thresholding for binary output
+    
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            cpd = FunctionalCPD(variable=node, function=complex_func, evidence=parents)
+        cpds.append(cpd)
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def generate_growth_functional_CPD(G):
+    """Generate growth functional CPDs for a Functional Bayesian Network defined by skeleton G."""
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            def func(*args):
+                return int(min(sum(args) + 1, 1))  # growth function capped at 1
+            cpd = FunctionalCPD(variable=node, function=func, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def generate_decay_functional_CPD(G):
+    """Generate decay functional CPDs for a Functional Bayesian Network defined by skeleton G."""
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            def func(*args):
+                return int(max(sum(args) - 1, 0))  # decay function floored at 0
+            cpd = FunctionalCPD(variable=node, function=func, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def generate_matern_functional_CPD(G, alpha=1.0):
+    """Generate Matern functional CPDs for a Functional Bayesian Network defined by skeleton G."""
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            def func(*args):
+                distance = sum(args)
+                matern_value = (1 + (math.sqrt(3) * distance) / alpha) * math.exp(-(math.sqrt(3) * distance) / alpha)
+                return int(matern_value > 0.5)  # thresholding for binary output
+            cpd = FunctionalCPD(variable=node, function=func, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def generate_functional_bayesian_data(G, num_samples=1000, functional_type="complex", seed=42, sampling_method="forward"):
+    """Generate data for a Functional Bayesian Network defined by the DAG G."""
+    match functional_type:
+        case "linear_gaussian":
+            model = generate_random_linear_gaussian_CPD(G)
+        case "complex":
+            model = generate_complex_family_functional_CPD(G)
+        case "growth":
+            model = generate_growth_functional_CPD(G)
+        case "decay":
+            model = generate_decay_functional_CPD(G)
+        case "matern":
+            model = generate_matern_functional_CPD(G)
+        case _:
+            model = generate_random_functional_CPD(G)
+
+    match sampling_method:
+        case "forward":
+            sampler = BayesianModelSampling(model)
+            data = sampler.forward_sample(size=num_samples, seed=seed) # is essentially a gaussian process over the functional CPDs
+        case "Gibbs":
+            gibbs = GibbsSampling(model)
+            data = gibbs.sample(size=num_samples, burn_in=500, seed=seed)
+        case "simulate":
+            data = model.simulate(num_samples, seed=seed)
+        case _:
+            raise ValueError(f"Unknown sampling method: {sampling_method}")
+
+    return data
+
 def linear_structural_equation_model(G, noise_scale=0.1, seed=42):
     """Generate data from a linear Gaussian structural equation model defined by the DAG G."""
     rng = np.random.default_rng(seed)
