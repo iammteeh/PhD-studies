@@ -3,8 +3,10 @@ import numpy as np
 import networkx as nx
 
 
-from pgmpy.models import DiscreteBayesianNetwork, DynamicBayesianNetwork as DBN, MarkovNetwork, FactorGraph
-from pgmpy.factors.discrete import TabularCPD, DiscreteFactor
+from pgmpy.models import DiscreteBayesianNetwork, DynamicBayesianNetwork as DBN, MarkovNetwork, FactorGraph, LinearGaussianBayesianNetwork, FunctionalBayesianNetwork, ClusterGraph
+from pgmpy.factors.discrete import TabularCPD, DiscreteFactor, NoisyORCPD, JointProbabilityDistribution
+from pgmpy.factors.continuous import LinearGaussianCPD
+from pgmpy.factors.hybrid import FunctionalCPD
 from pgmpy.sampling import BayesianModelSampling, GibbsSampling
 
 # we basically just need any structure over which we can sample a generative model of joint probabilities
@@ -57,6 +59,12 @@ def generate_graph(type="ring_of_cliques", nodes=50):
     
     return graph
 
+# Mor specifically, it is useful to model binary Markov networks and factor graphs over random graph structures
+# to generate synthetic data for testing inference algorithms and learning algorithms in probabilistic graphical models.
+# These models can capture complex dependencies and interactions between binary variables, thus are easy to interpret, making them suitable for various applications
+# because once we have a stationary distribution defined by the graph structure and associated factors, we can sample from this distribution to generate synthetic data.
+# This synthetic data can then be used to evaluate the performance of inference algorithms (e.g., Gibbs sampling, belief propagation) and learning algorithms (e.g., parameter estimation, structure learning) in probabilistic graphical models.
+
 def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42):
     """
     Binary Markov network:
@@ -105,9 +113,14 @@ def markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), se
     M.add_factors(*factors)
     return M
 
-def gibbs_sample_markov(M, size=5000, burn_in=500, seed=123):
-    gibbs = GibbsSampling(M)
-    return gibbs.sample(size=size, burn_in=burn_in, seed=seed)
+# To represent more complex interactions and higher-order dependencies between variables,
+# we can use Factor Graphs, which explicitly represent factors as nodes in the graph.
+# This allows us to model not only pairwise interactions but also higher-order interactions among multiple variables.
+# Factor Graphs are bipartite graphs consisting of variable nodes and factor nodes. Normally, Factor Graphs are undirected graphs, as they represent joint distributions without inherent directionality.
+# They can also contain cycles and cliques, similar to Markov networks, allowing for the representation of complex dependencies among variables.
+# It is particularly useful for representing models where factors involve multiple variables, such as in error-correcting codes, constraint satisfaction problems, and certain types of probabilistic graphical models.
+# For example, in a Factor Graph, we can have factors that represent interactions among three or more variables, capturing more intricate relationships than pairwise factors alone.
+# Especially if the factorization represents a function, such that we can use FunctionalCPD to define deterministic relationships between variables over which we can sample random processes.
 
 def factorgraph_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42):
     """
@@ -147,6 +160,46 @@ def factorgraph_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0
 
     FG.add_factors(*factors)
     return FG
+
+# To induce conditional dynamics to control when there is stable flow in the network,
+# we can use Dynamic Bayesian Networks (DBNs) to model temporal dependencies between variables across time
+# This allows us to capture how the state of variables evolves over time based on their previous states
+# and the influence of other variables in the network.
+# By defining transition probabilities and temporal dependencies,
+# we can simulate the dynamic behavior of the system and generate time-series data that reflects these dynamics
+# For the start, we assume that the random CPD reflect potential temporal dependencies between variables across time steps,
+# while we construct static structures and explore their dynamics through sampling.
+
+def generate_random_CPD(G):
+    """Generate random CPDs for a DiscreteBayesianNetwork defined by the DAG G."""
+    model = DiscreteBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            p = rng.uniform(0.2, 0.8)
+            cpd = TabularCPD(variable=node, variable_card=2, values=[[1-p], [p]])
+        else:
+            # child node
+            parent_card = [2] * len(parents)
+            num_rows = 2
+            num_cols = 2 ** len(parents)
+            values = np.zeros((num_rows, num_cols))
+            for col in range(num_cols):
+                p = rng.uniform(0.2, 0.8)
+                values[0, col] = 1 - p
+                values[1, col] = p
+            cpd = TabularCPD(variable=node, variable_card=2, evidence=parents, evidence_card=parent_card, values=values)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
 
 def linear_structural_equation_model(G, noise_scale=0.1, seed=42):
     """Generate data from a linear Gaussian structural equation model defined by the DAG G."""
@@ -190,35 +243,9 @@ def hierarchical_bayesian_model(G, group_var, noise_scale=0.1, seed=42):
             data[node] = np.dot(weights, parent_values) + noise
     return data
 
-def generate_random_CPD(G):
-    """Generate random CPDs for a DiscreteBayesianNetwork defined by the DAG G."""
-    model = DiscreteBayesianNetwork()
-    model.add_nodes_from(G.nodes())
-    model.add_edges_from(G.edges())
-
-    rng = np.random.default_rng(42)
-    cpds = []
-    for node in model.nodes():
-        parents = list(model.get_parents(node))
-        if not parents:
-            # root node
-            p = rng.uniform(0.2, 0.8)
-            cpd = TabularCPD(variable=node, variable_card=2, values=[[1-p], [p]])
-        else:
-            # child node
-            parent_card = [2] * len(parents)
-            num_rows = 2
-            num_cols = 2 ** len(parents)
-            values = np.zeros((num_rows, num_cols))
-            for col in range(num_cols):
-                p = rng.uniform(0.2, 0.8)
-                values[0, col] = 1 - p
-                values[1, col] = p
-            cpd = TabularCPD(variable=node, variable_card=2, evidence=parents, evidence_card=parent_card, values=values)
-        cpds.append(cpd)
-
-    model.add_cpds(*cpds)
-    return model
+def gibbs_sample_markov(M, size=5000, burn_in=500, seed=123):
+    gibbs = GibbsSampling(M)
+    return gibbs.sample(size=size, burn_in=burn_in, seed=seed)
 
 def generate_random_data(G, num_samples=1000):
     """Generate random data for a DiscreteBayesianNetwork defined by the DAG G."""
