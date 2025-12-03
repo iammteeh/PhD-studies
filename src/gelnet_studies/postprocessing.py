@@ -9,7 +9,7 @@ def process_all_results(data_dir):
 
     all_results = []
     for file_name in os.listdir(data_dir):
-        if file_name.endswith('.csv') and file_name.startswith("scores_model_"):
+        if file_name.endswith('.csv') and (file_name.startswith("scores_model_") or file_name.startswith("edge_matched")):
             file_path = os.path.join(data_dir, file_name)
             df = import_results(file_path)
             all_results.append(df)
@@ -93,8 +93,8 @@ def save_results(df, output_path):
 # main function to run the postprocessing pipeline
 def main():
     print("Starting postprocessing of gelnet study results...")
-    data_dirs = ["./data/extended_experiments/", "./data/paper_experiments/"]
-    output_paths = ["./data/extended_experiments/extended_experiments.csv", "./data/paper_experiments/paper_experiments.csv"]
+    data_dirs = ["./data/extended_experiments/", "./data/paper_experiments/", "./data/ba_conditional_hamiltonian/"]
+    output_paths = ["./data/extended_experiments/extended_experiments.csv", "./data/paper_experiments/paper_experiments.csv", "./data/ba_conditional_hamiltonian/ba_conditional_hamiltonian.csv"]
     metric_columns = ["F1", "MCC"]
     threshold = []
     overwrite = False
