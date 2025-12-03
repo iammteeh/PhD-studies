@@ -90,7 +90,7 @@ def save_results(df, output_path):
 def main():
     print("Starting postprocessing of gelnet study results...")
     data_dirs = ["./data/extended_experiments/", "./data/paper_experiments/"]
-    output_paths = ["./data/extended_experiments.csv", "./data/paper_experiments.csv"]
+    output_paths = ["./data/extended_experiments/extended_experiments.csv", "./data/paper_experiments/paper_experiments.csv"]
     metric_columns = ["F1", "MCC"]
     threshold = []
     overwrite = False
