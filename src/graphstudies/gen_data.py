@@ -9,7 +9,7 @@ from pgmpy.factors.continuous import LinearGaussianCPD
 from pgmpy.factors.hybrid import FunctionalCPD
 from pgmpy.sampling import BayesianModelSampling, GibbsSampling
 
-# we basically just need any structure over which we can sample a generative model of joint probabilities
+# we basically just need any structure (R,F,G,A) over which we can sample a generative model of joint probabilities
 # using graphs to model heterogeneous mass functions is simple to understand yet versatile to cover a wide range of applications
 # to generate this data, any random graph describes an unknown domain function, which we want to analyze later
 # deterministic graphs serve as knowledge graphs over domains to model specific dependencies 
@@ -374,6 +374,109 @@ def generate_matern_functional_CPD(G, alpha=1.0):
     model.check_model()
     return model
 
+def generate_regular_functional_CPD(G):
+    """
+    Generate regular functional CPDs for a Functional Bayesian Network defined by skeleton G.
+    Regular functions could be simple deterministic mappings, such as parity functions or threshold functions,
+    such that we get partial conditional dependencies between variables, which we can control via parameters.
+    We shape the partial conditional dependence as noise over the functional CPD, such that we can switch between
+    confounding or mediating effects in the network structure.
+
+    This can be done by defining a function that maps parent values to child values with some added randomness.
+    """
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            def func(*args):
+                base_value = sum(args) % 2  # simple parity function
+                noise = rng.random() < 0.1  # 10% chance to flip the value
+                if noise:
+                    return int(1 - base_value)
+                return int(base_value)
+            cpd = FunctionalCPD(variable=node, function=func, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def elastic_functional_CPD(G, noise_level=0.1):
+    """Generate elastic functional CPDs for a Functional Bayesian Network defined by skeleton G.
+    This way we have random functional CPDs with controllable noise to model partial conditional dependencies,
+    which change the likelihood of certain configurations in the joint distribution, such that we can explore confounding or mediating effects in the network structure,
+    or estimate the robustness of inference algorithms to noise in the functional relationships.
+    If we use a graphical elastic net regularization approach, we can control the sparsity and smoothness of the functional relationships in the network.
+    Sparse functions can represent strong, direct dependencies between variables, while smooth functions can capture more gradual changes and indirect dependencies, to
+    get a feeling of how robust inference is to different types of functional relationships and their (factorial) complexities.
+    The noise_level parameter controls the amount of randomness introduced into the functional relationships.
+    """
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            def func(*args):
+                base_value = sum(args) % 2  # simple parity function
+                noise = rng.normal(loc=0.0, scale=noise_level)
+                return int(base_value + noise > 0.5)  # thresholding for binary output
+            cpd = FunctionalCPD(variable=node, function=func, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
+def generate_factored_noise_functional_CPD(G, noise_level=0.1):
+    """
+    this is similar to elastic_functional_CPD but uses a factored noise model to introduce randomness into the functional relationships, which 
+    is essentially a way to model partial conditional dependencies with structured noise, a.k.a. causal noise as structured equations.
+    """
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(G.nodes())
+    model.add_edges_from(G.edges())
+
+    rng = np.random.default_rng(42)
+    cpds = []
+    for node in model.nodes():
+        parents = list(model.get_parents(node))
+        if not parents:
+            # root node
+            func = lambda : rng.integers(0, 2)  # random binary value
+            cpd = FunctionalCPD(variable=node, function=func, evidence=[])
+        else:
+            # child node
+            def func(*args):
+                base_value = sum(args) % 2  # simple parity function
+                # factored noise: each parent contributes some noise
+                total_noise = sum(rng.normal(loc=0.0, scale=noise_level) for _ in args)
+                return int(base_value + total_noise > 0.5)  # thresholding for binary output
+            cpd = FunctionalCPD(variable=node, function=func, evidence=parents)
+        cpds.append(cpd)
+
+    model.add_cpds(*cpds)
+    model.check_model()
+    return model
+
 def generate_functional_bayesian_data(G, num_samples=1000, functional_type="complex", seed=42, sampling_method="forward"):
     """Generate data for a Functional Bayesian Network defined by the DAG G."""
     match functional_type:
@@ -529,3 +632,108 @@ def generate_random_cluster_graph(G, bias_range=(0.2, 0.8), coupling_range=(0.5,
 
     CG.add_factors(*factors)
     return CG
+
+def gibbs_sample_cluster_graph(CG, size=5000, burn_in=500, seed=123):
+    gibbs = GibbsSampling(CG)
+    return gibbs.sample(size=size, burn_in=burn_in, seed=seed)
+
+def generate_covariance_data(G, C=1.0, noise_scale=0.1, num_samples=1000, seed=42):
+    """Generate data from a Gaussian graphical model defined by the undirected graph G."""
+    rng = np.random.default_rng(seed)
+    n = len(G.nodes())
+    adj_matrix = nx.to_numpy_array(G)
+    precision_matrix = C * adj_matrix + np.eye(n)  # simple precision matrix
+    covariance_matrix = np.linalg.inv(precision_matrix)
+
+    data = rng.multivariate_normal(mean=np.zeros(n), cov=covariance_matrix + noise_scale * np.eye(n), size=num_samples)
+    return data
+
+def gaussian_from_skeleton(G, noise_scale=0.1, seed=42):
+    """Generate a Gaussian graphical model from the skeleton G."""
+    rng = np.random.default_rng(seed)
+    M = MarkovNetwork()
+    M.add_nodes_from(G.nodes())
+    M.add_edges_from(G.edges())
+
+    factors = []
+
+    # unary
+    for v in M.nodes():
+        mean = rng.normal(0, 1)
+        variance = rng.uniform(0.5, 2.0)
+        phi = DiscreteFactor(variables=[v], cardinality=[2], values=[mean - math.sqrt(variance), mean + math.sqrt(variance)])
+        factors.append(phi)
+
+    # pairwise
+    for u, v in M.edges():
+        covariance = rng.uniform(0.5, 2.0)
+        table = np.array([
+            [covariance, 0],
+            [0, covariance]
+        ], dtype=float)
+        phi = DiscreteFactor(variables=[u, v], cardinality=[2, 2], values=table)
+        factors.append(phi)
+
+    M.add_factors(*factors)
+    return M
+
+def gen_covariance_graph_data(graph_type="geometric", structure_type="markov", functional_type="complex"):
+    match graph_type:
+        case "geometric":
+            G = generate_random_graph(type="geometric", nodes=50)
+        case "cograph":
+            G = generate_random_graph(type="cograph", nodes=50)
+        case "kernel":
+            G = generate_random_graph(type="kernel", nodes=50)
+        case "cluster":
+            G = generate_random_graph(type="cluster", nodes=50)
+        case _:
+            raise ValueError(f"Unknown graph type: {graph_type}")
+    # induce CPD structure via covariance
+    if structure_type == "markov":
+        M = markov_from_skeleton(G, bias_range=(0.2, 0.8), coupling_range=(0.5, 2.0), seed=42)
+    elif structure_type == "gaussian":
+        M = gaussian_from_skeleton(G, noise_scale=0.1, seed=42)
+    else:
+        raise ValueError(f"Unknown structure type: {structure_type}")
+    # add functional CPDs to model complex dependencies
+    #M.add_functional_cpd("f1", [0, 1], [2], lambda x: x[0] + x[1])
+    #M.add_functional_cpd("f2", [1, 2], [3], lambda x: x[0] * x[1])
+    #M.add_functional_cpd("f3", [0, 2], [3], lambda x: x[0] - x[1])
+    # get functional CPD by model type
+    match functional_type:
+        case "linear_gaussian":
+            model = generate_random_linear_gaussian_CPD(G)
+            functional_cpd = model.get_cpds()
+        case "complex":
+            model = generate_complex_family_functional_CPD(G)
+            functional_cpd = model.get_cpds()
+        case "growth":
+            model = generate_growth_functional_CPD(G)
+            functional_cpd = model.get_cpds()
+        case "decay":
+            model = generate_decay_functional_CPD(G)
+            functional_cpd = model.get_cpds()
+        case "matern":
+            model = generate_matern_functional_CPD(G)
+            functional_cpd = model.get_cpds()
+        case _:
+            model = generate_random_functional_CPD(G)
+            functional_cpd = model.get_cpds()
+    # we now have to convert the markov model to a functional bayesian network
+    model = FunctionalBayesianNetwork()
+    model.add_nodes_from(M.nodes())
+    model.add_edges_from(M.edges())
+    model.add_cpds(*functional_cpd)
+    model.check_model()
+    # finally, sample data from the combined model
+    sampler = BayesianModelSampling(model)
+    data = sampler.forward_sample(size=1000, seed=42)
+    # compute empirical covariance
+    covariance = np.cov(data.T) 
+    return G, M, data, covariance
+    # alternatively, generate data directly from covariance
+    # first get graph from model
+    G = model.moralize()
+    data = generate_covariance_data(G, C=1.0, noise_scale=0.1, num_samples=1000, seed=42)
+
