@@ -43,12 +43,14 @@ def recalculate_metrics(df, metric_column, overwrite=False):
         fp = df['FP']
         fn = df['FN']
         mcc = (tp * tn - fp * fn) / ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)).pow(0.5)
+        # fill NaN values in mcc due to zero
+        mcc = mcc.fillna(0)
         # count division by zero and set to NaN
         #mcc[(tp + fp) * (tp + fn) * (tn + fp) * (tn + fn) == 0] = float('nan')
         # only overwrite if old value is NaN
-        df.loc[df[metric_column].isna(), metric_column] = mcc
+        #df.loc[df[metric_column].isna(), metric_column] = mcc
         # just overwrite all values
-        #df.loc[:, metric_column] = mcc
+        df.loc[:, metric_column] = mcc
 
     elif metric_column == "F1":
         tp = df['TP']
@@ -57,10 +59,12 @@ def recalculate_metrics(df, metric_column, overwrite=False):
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         f1 = 2 * (precision * recall) / (precision + recall)
+        # fill NaN values in f1 due to zero
+        f1 = f1.fillna(0)
         # only overwrite if old value is NaN
-        df.loc[df[metric_column].isna(), metric_column] = f1
+        #df.loc[df[metric_column].isna(), metric_column] = f1
         # just overwrite all values
-        #df.loc[:, metric_column] = f1
+        df.loc[:, metric_column] = f1
     else:
         raise ValueError(f"Metric {metric_column} not supported for recalculation.")
 
@@ -104,6 +108,10 @@ def main():
             nan_rows = processed_results[processed_results["MCC"].isna()]
             # mcc rows which have NaN values in TP, TN, FP, FN
             print(nan_rows[nan_rows[["TP", "TN", "FP", "FN"]].isna().any(axis=1)])
+        elif processed_results[processed_results["MCC"].isna()].shape[0] > 0:
+            print(f"Warning: There are {processed_results[processed_results['MCC'].isna()].shape[0]} rows with NaN MCC values, but TP, TN, FP, FN are all present.")
+            print("These rows are:")
+            print(processed_results[processed_results["MCC"].isna()])
         else:
             print("No NaN values found in the processed results.")
             
